@@ -1,20 +1,25 @@
-NAME = jetpack_server
-
 CXX = g++
-CXXFLAGS = -Wall -Wextra -std=c++17
+CXXFLAGS = -std=c++17 -Wall -Wextra
+LDFLAGS = -lsfml-graphics -lsfml-window -lsfml-system -pthread
 
-SRC = main.cpp Server.cpp
-OBJ = $(SRC:.cpp=.o)
+CLIENT_SRCS = client/main.cpp
+CLIENT_OBJS = $(CLIENT_SRCS:.cpp=.o)
+CLIENT_BIN = client_app
 
-all: $(NAME)
+SERVER_SRCS = server/Server.cpp server/main.cpp
+SERVER_BIN = server_app
 
-$(NAME): $(OBJ)
-	$(CXX) $(CXXFLAGS) -o $(NAME) $(OBJ)
+all: $(CLIENT_BIN) $(SERVER_BIN)
+
+$(CLIENT_BIN): $(CLIENT_SRCS)
+	$(CXX) $(CLIENT_SRCS) -o $(CLIENT_BIN) $(LDFLAGS)
+
+$(SERVER_BIN): $(SERVER_SRCS)
+	$(CXX) $(SERVER_SRCS) -o $(SERVER_BIN) -pthread
 
 clean:
-	rm -f $(OBJ)
+	rm -f $(CLIENT_BIN) $(SERVER_BIN)
 
 fclean: clean
-	rm -f $(NAME)
 
 re: fclean all

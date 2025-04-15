@@ -51,11 +51,7 @@ void Server::load_map(const std::string& filepath) {
     map_data.assign((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
 }
 
-void Server::broadcast(const std::string& message) {
-    for (int i = 1; i < nfds; i++) {
-        send_to_client(fds[i].fd, message);
-    }
-}
+
 
 void Server::send_to_client(int client_fd, const std::string& message) {
     send(client_fd, message.c_str(), message.size(), 0);
@@ -77,10 +73,27 @@ void Server::handle_client_input(int fd) {
             }
         }
     } else {
-        std::string msg(buffer);
+        std::string msg(buffer, bytes);
         std::cout << "Received from " << fd << ": " << msg;
-        player_states[fd] = msg;
-        broadcast("UPDATE " + msg);
+        
+        // Check if it's a MOVE message
+        int player_id, x, y;
+        if (sscanf(buffer, "MOVE %d %d %d", &player_id, &x, &y) == 3) {
+            // Validate player ID
+            if (player_id >= 0 && player_id < 2) {
+                // Store player state
+                player_states[player_id] = msg;
+                
+                // Forward this move to ALL clients (including the sender for confirmation)
+                broadcast(msg);
+            }
+        }
+    }
+}
+
+void Server::broadcast(const std::string& message) {
+    for (int i = 1; i < nfds; i++) {
+        send(fds[i].fd, message.c_str(), message.size(), 0);
     }
 }
 
@@ -122,6 +135,12 @@ bool Server::accept_cli() {
             send_to_client(new_client_fd, "Welcome! Waiting for another player...\n");
 
             player_sockets[players_connected++] = new_client_fd;
+            if (players_connected == 0) {
+                send_to_client(new_client_fd, "ID 0\n");
+            } else if (players_connected == 1) {
+                send_to_client(new_client_fd, "ID 1\n");
+            }
+            
 
             if (players_connected == 2) {
                 std::cout << "Two players connected. Starting game session...\n";
@@ -143,5 +162,52 @@ bool Server::accept_cli() {
 }
 
 bool Server::run() {
-    return accept_cli();
+    std::cout << "Server running and waiting for connections...\n";
+    
+    while (true) {
+        int poll_result = poll(fds, nfds, 1000); // Poll with 1 second timeout
+        
+        if (poll_result < 0) {
+            perror("poll failed");
+            return false;
+        }
+        
+        // Check for new connections
+        if (fds[0].revents & POLLIN) {
+            struct sockaddr_in client_addr;
+            socklen_t client_len = sizeof(client_addr);
+            int new_client = accept(server_fd, (struct sockaddr*)&client_addr, &client_len);
+            
+            if (new_client < 0) {
+                perror("accept failed");
+                continue;
+            }
+            
+            // Add to poll set
+            if (nfds < MAX_CLIENTS) {
+                fds[nfds].fd = new_client;
+                fds[nfds].events = POLLIN;
+                
+                // Assign player ID (0 or 1)
+                int player_id = (nfds - 1) % 2;
+                std::string id_msg = "ID " + std::to_string(player_id) + "\n";
+                send_to_client(new_client, id_msg);
+                
+                std::cout << "New client connected: FD=" << new_client << ", assigned Player ID " << player_id << std::endl;
+                nfds++;
+            } else {
+                std::cout << "Too many clients, rejecting connection\n";
+                close(new_client);
+            }
+        }
+        
+        // Check existing connections for data
+        for (int i = 1; i < nfds; i++) {
+            if (fds[i].revents & POLLIN) {
+                handle_client_input(fds[i].fd);
+            }
+        }
+    }
+    
+    return true;
 }
