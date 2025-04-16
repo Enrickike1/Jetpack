@@ -60,32 +60,35 @@ void Server::send_to_client(int client_fd, const std::string& message) {
 void Server::handle_client_input(int fd) {
     char buffer[BUFFER_SIZE];
     memset(buffer, 0, BUFFER_SIZE);
-    int bytes = recv(fd, buffer, BUFFER_SIZE, 0);
+    int bytes = recv(fd, buffer, BUFFER_SIZE - 1, 0);
+    
     if (bytes <= 0) {
         std::cout << "Client " << fd << " disconnected\n";
         close(fd);
+        
         for (int i = 1; i < nfds; ++i) {
             if (fds[i].fd == fd) {
-                for (int j = i; j < nfds - 1; ++j)
+                for (int j = i; j < nfds - 1; ++j) {
                     fds[j] = fds[j + 1];
+                }
                 nfds--;
                 break;
             }
         }
     } else {
-        std::string msg(buffer, bytes);
-        std::cout << "Received from " << fd << ": " << msg;
+        // Process received data
+        buffer[bytes] = '\0';  // Ensure null termination
+        std::string msg(buffer);
+        std::cout << "Received from client " << fd << ": " << msg;
         
         // Check if it's a MOVE message
         int player_id, x, y;
         if (sscanf(buffer, "MOVE %d %d %d", &player_id, &x, &y) == 3) {
-            // Validate player ID
-            if (player_id >= 0 && player_id < 2) {
-                // Store player state
-                player_states[player_id] = msg;
-                
-                // Forward this move to ALL clients (including the sender for confirmation)
-                broadcast(msg);
+            // Forward this position update to ALL clients
+            for (int i = 1; i < nfds; i++) {
+                // Optionally, skip sending to the sender
+                // if (fds[i].fd != fd)
+                send(fds[i].fd, msg.c_str(), msg.length(), 0);
             }
         }
     }
