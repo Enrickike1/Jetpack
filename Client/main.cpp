@@ -1,8 +1,8 @@
 #include <SFML/Graphics.hpp>
 #include <iostream>
-#include <thread>
-#include "CubeState.hpp"
-#include "NetworkThread.hpp"
+#include "../CubeState.hpp"
+#include "../Server/Server.hpp"
+#include "../NetworkThread.hpp"
 
 int main() {
     SharedCubeState state;
@@ -23,10 +23,8 @@ int main() {
                 window.close();
         }
 
-        // Process movement only if the window is in focus.
         if (window.hasFocus()) {
             std::lock_guard<std::mutex> lock(state.mutex);
-            // Ensure that player_id has been set (i.e., not -1).
             if(state.player_id != -1){
                 auto& me = state.players[state.player_id];
 

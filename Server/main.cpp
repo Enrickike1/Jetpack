@@ -7,8 +7,7 @@ int main(int argc, char* argv[]) {
         return 84;
     }
 
-    const char* server_ip = argv[1];
-    int port = atoi(argv[2]);
+    int port = 0;
     std::string map_path;
 
     for (int i = 1; i < argc; i++) {
@@ -17,10 +16,7 @@ int main(int argc, char* argv[]) {
         } else if (std::string(argv[i]) == "-m" && i + 1 < argc) {
             map_path = argv[++i];
         }
-    }
-
-
-    
+    }    
 
     if (port == 0 || map_path.empty()) {
         std::cerr << "Invalid arguments\n";

@@ -14,17 +14,18 @@ class Server {
 public:
     Server(int port, const std::string& map_path);
     ~Server();
+    
     bool run();
+    
+private:
     void broadcast(const std::string& message);
     void send_to_client(int client_fd, const std::string& message);
     void handle_client_input(int fd);
     void load_map(const std::string& filepath);
     void start_game_if_ready();
     bool accept_cli();
-    void run_game_session(int fd1, int fd2);  // Add this line
+    void run_game_session(int fd1, int fd2);
 
-
-private:
     int server_fd;
     struct sockaddr_in server_addr;
     struct pollfd fds[MAX_CLIENTS];

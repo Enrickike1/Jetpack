@@ -1,25 +1,22 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -Wextra
-LDFLAGS = -lsfml-graphics -lsfml-window -lsfml-system -pthread
+CXXFLAGS = -Wall -Wextra -std=c++11 -pthread
 
-CLIENT_SRCS = client/main.cpp
-CLIENT_OBJS = $(CLIENT_SRCS:.cpp=.o)
-CLIENT_BIN = client_app
+SERVER_SOURCES = Server/main.cpp Server/Server.cpp
+SERVER_TARGET = server_app
 
-SERVER_SRCS = server/Server.cpp server/main.cpp
-SERVER_BIN = server_app
+CLIENT_SOURCES = Client/main.cpp CubeState.cpp NetworkThread.cpp
+CLIENT_TARGET = client_app
+CLIENT_LIBS = -lsfml-graphics -lsfml-window -lsfml-system
 
-all: $(CLIENT_BIN) $(SERVER_BIN)
+all: server client
 
-$(CLIENT_BIN): $(CLIENT_SRCS)
-	$(CXX) $(CLIENT_SRCS) -o $(CLIENT_BIN) $(LDFLAGS)
+server: $(SERVER_SOURCES)
+	$(CXX) $(CXXFLAGS) -o $(SERVER_TARGET) $(SERVER_SOURCES)
 
-$(SERVER_BIN): $(SERVER_SRCS)
-	$(CXX) $(SERVER_SRCS) -o $(SERVER_BIN) -pthread
+client: $(CLIENT_SOURCES)
+	$(CXX) $(CXXFLAGS) -o $(CLIENT_TARGET) $(CLIENT_SOURCES) $(CLIENT_LIBS)
 
 clean:
-	rm -f $(CLIENT_BIN) $(SERVER_BIN)
+	rm -f $(SERVER_TARGET) $(CLIENT_TARGET)
 
-fclean: clean
-
-re: fclean all
+.PHONY: all server client clean

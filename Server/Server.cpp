@@ -5,6 +5,7 @@
 #include <fstream>
 #include <cstring>
 #include <cstdlib>
+#include <sys/socket.h>
 
 Server::Server(int port, const std::string& map_path) {
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -51,10 +52,14 @@ void Server::load_map(const std::string& filepath) {
     map_data.assign((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
 }
 
-
-
 void Server::send_to_client(int client_fd, const std::string& message) {
     send(client_fd, message.c_str(), message.size(), 0);
+}
+
+void Server::broadcast(const std::string& message) {
+    for (int i = 1; i < nfds; i++) {
+        send(fds[i].fd, message.c_str(), message.size(), 0);
+    }
 }
 
 void Server::handle_client_input(int fd) {
@@ -91,12 +96,6 @@ void Server::handle_client_input(int fd) {
                 send(fds[i].fd, msg.c_str(), msg.length(), 0);
             }
         }
-    }
-}
-
-void Server::broadcast(const std::string& message) {
-    for (int i = 1; i < nfds; i++) {
-        send(fds[i].fd, message.c_str(), message.size(), 0);
     }
 }
 
@@ -144,7 +143,6 @@ bool Server::accept_cli() {
                 send_to_client(new_client_fd, "ID 1\n");
             }
             
-
             if (players_connected == 2) {
                 std::cout << "Two players connected. Starting game session...\n";
 

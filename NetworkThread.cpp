@@ -1,5 +1,4 @@
-#pragma once
-#include "CubeState.hpp"
+#include "NetworkThread.hpp"
 #include <thread>
 #include <unistd.h>
 #include <netinet/in.h>
