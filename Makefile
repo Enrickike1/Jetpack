@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -Wall -Wextra -std=c++11 -pthread
+CXXFLAGS = -Wall -Wextra -std=c++17 -pthread
 
 SERVER_SOURCES = Server/main.cpp Server/Server.cpp
 SERVER_TARGET = server_app

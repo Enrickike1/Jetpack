@@ -9,12 +9,15 @@
 
 
 void client_position(SharedCubeState *state, int sock){
-    std::lock_guard<std::mutex> lock(state->mutex);
-        auto& me = state->players[state->player_id];
-        std::string msg = "MOVE " + std::to_string(state->player_id) + " " +
-                                    std::to_string((int)me.x) + " " +
-                                    std::to_string((int)me.y) + "\n";
-        send(sock, msg.c_str(), msg.size(), 0);
+
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+            auto& me = state->players[state->player_id];
+            std::string msg = "MOVE " + std::to_string(state->player_id) + " " +
+                                        std::to_string((int)me.x) + " " +
+                                        std::to_string((int)me.y) + "\n";
+            send(sock, msg.c_str(), msg.size(), 0);
+    }
 }
 
 void run_network_thread(SharedCubeState *state, const char *ip, int port) {
