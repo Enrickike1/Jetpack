@@ -81,18 +81,13 @@ void Server::handle_client_input(int fd) {
             }
         }
     } else {
-        // Process received data
-        buffer[bytes] = '\0';  // Ensure null termination
+        buffer[bytes] = '\0';
         std::string msg(buffer);
-        std::cout << "Received from client " << fd << ": " << msg;
+        // std::cout << "Received from client " << fd << ": " << msg;
         
-        // Check if it's a MOVE message
         int player_id, x, y;
         if (sscanf(buffer, "MOVE %d %d %d", &player_id, &x, &y) == 3) {
-            // Forward this position update to ALL clients
             for (int i = 1; i < nfds; i++) {
-                // Optionally, skip sending to the sender
-                // if (fds[i].fd != fd)
                 send(fds[i].fd, msg.c_str(), msg.length(), 0);
             }
         }
@@ -103,11 +98,8 @@ void Server::run_game_session(int fd1, int fd2) {
     send_to_client(fd1, "Game starting! You are Player 1\n" + map_data);
     send_to_client(fd2, "Game starting! You are Player 2\n" + map_data);
 
-    // Placeholder game loop
     char buffer[BUFFER_SIZE];
     while (true) {
-        // Normally you'd use poll() here for input from both clients
-        // This is just a mock game session
         sleep(1);
     }
 }
@@ -158,7 +150,6 @@ bool Server::accept_cli() {
             }
         }
     }
-
     return true;
 }
 

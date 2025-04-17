@@ -14,7 +14,6 @@ class Server {
 public:
     Server(int port, const std::string& map_path);
     ~Server();
-    
     bool run();
     
 private:

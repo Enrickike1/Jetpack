@@ -7,21 +7,28 @@
 #include <string>
 #include <cstring>
 
-void run_network_thread(SharedCubeState* state, const char* ip, int port) {
-    // Create socket
+
+void client_position(SharedCubeState *state, int sock){
+    std::lock_guard<std::mutex> lock(state->mutex);
+        auto& me = state->players[state->player_id];
+        std::string msg = "MOVE " + std::to_string(state->player_id) + " " +
+                                    std::to_string((int)me.x) + " " +
+                                    std::to_string((int)me.y) + "\n";
+        send(sock, msg.c_str(), msg.size(), 0);
+}
+
+void run_network_thread(SharedCubeState *state, const char *ip, int port) {
     int sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
         std::cerr << "Failed to create socket\n";
         return;
     }
     
-    // Set up server address
     sockaddr_in serv_addr{};
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(port);
     inet_pton(AF_INET, ip, &serv_addr.sin_addr);
 
-    // Connect to server
     if (connect(sock, (sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
         std::cerr << "Failed to connect to server\n";
         close(sock);
@@ -29,19 +36,15 @@ void run_network_thread(SharedCubeState* state, const char* ip, int port) {
     }
     
     std::cout << "Connected to server at " << ip << ":" << port << std::endl;
-
-    // Receive initial ID from server
     char buffer[1024] = {0};
     int bytes_read = read(sock, buffer, 1024);
     
     if (bytes_read > 0 && strncmp(buffer, "ID ", 3) == 0) {
         int assigned_id = buffer[3] - '0';
-        
         {
             std::lock_guard<std::mutex> lock(state->mutex);
             state->player_id = assigned_id;
             
-            // Initialize both player positions
             state->players[0].x = 100.f;
             state->players[0].y = 100.f;
             state->players[0].active = true;
@@ -58,45 +61,21 @@ void run_network_thread(SharedCubeState* state, const char* ip, int port) {
         return;
     }
 
-    // Start network communication thread
     std::thread([sock, state]() {
         char recv_buf[1024];
-        
-        // Send initial position to server
-        {
-            std::lock_guard<std::mutex> lock(state->mutex);
-            auto& me = state->players[state->player_id];
-            std::string msg = "MOVE " + std::to_string(state->player_id) + " " +
-                             std::to_string((int)me.x) + " " +
-                             std::to_string((int)me.y) + "\n";
-            send(sock, msg.c_str(), msg.size(), 0);
-        }
-        
+        client_position(state, sock);        
         while (true) {
-            // Send our position update every 50ms
-            {
-                std::lock_guard<std::mutex> lock(state->mutex);
-                auto& me = state->players[state->player_id];
-                std::string msg = "MOVE " + std::to_string(state->player_id) + " " +
-                                 std::to_string((int)me.x) + " " +
-                                 std::to_string((int)me.y) + "\n";
-                send(sock, msg.c_str(), msg.size(), 0);
-            }
-
-            // Check for incoming messages (non-blocking)
+            client_position(state, sock);
             memset(recv_buf, 0, sizeof(recv_buf));
             int bytes = recv(sock, recv_buf, sizeof(recv_buf) - 1, MSG_DONTWAIT);
             
             if (bytes > 0) {
-                recv_buf[bytes] = '\0';  // Ensure null termination
+                recv_buf[bytes] = '\0';
                 
-                // Process all complete messages
                 char* line = strtok(recv_buf, "\n");
                 while (line != nullptr) {
-                    // Parse MOVE messages
                     int id, x, y;
                     if (sscanf(line, "MOVE %d %d %d", &id, &x, &y) == 3) {
-                        // Only update the OTHER player's position
                         if (id != state->player_id) {
                             std::lock_guard<std::mutex> lock(state->mutex);
                             state->players[id].x = x;
@@ -108,9 +87,8 @@ void run_network_thread(SharedCubeState* state, const char* ip, int port) {
                     line = strtok(nullptr, "\n");
                 }
             }
-            
-            // Sleep to avoid hammering the CPU
-            usleep(50000);  // 50ms interval
+            usleep(50000);
         }
-    }).detach();
+    }
+    ).detach();
 }

@@ -4,14 +4,13 @@
 struct PlayerState {
     float x = 0.f;
     float y = 0.f;
-    bool active = false;  // Whether this player is active in the game
+    bool active = false;
 };
 
 struct SharedCubeState {
-    PlayerState players[2];   // Players data (0 = Red, 1 = Blue)
-    int player_id = -1;       // Which player this client controls (0 or 1)
+    PlayerState players[2];
+    int player_id = -1;
     std::mutex mutex;
-    
-    // Debug function declaration
+
     void printState();
 };
