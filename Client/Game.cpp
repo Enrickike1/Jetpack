@@ -18,8 +18,23 @@ Game::Game(SharedCubeState* state) : state(state) {
     // Initialize random number generator
     rng.seed(static_cast<unsigned int>(std::time(nullptr)));
     
+    loadTextures();
     loadBackground();
     spawnCoins();  // Create initial coins
+}
+
+void Game::loadTextures() {
+    // Load background texture in loadBackground() method
+    
+    // Load coin texture
+    if (!coinTexture.loadFromFile("img/coin.png")) {
+        std::cerr << "Failed to load coin texture! Using fallback shape." << std::endl;
+    }
+    
+    // Load obstacle texture
+    if (!obstacleTexture.loadFromFile("img/obstacle.png")) {
+        std::cerr << "Failed to load obstacle texture! Using fallback shape." << std::endl;
+    }
 }
 
 float Game::getRandomY() {
@@ -70,6 +85,11 @@ void Game::spawnCoins() {
         float x = window_width + i * 150.0f;  // Spread coins out horizontally
         float y = getRandomY();
         coins.emplace_back(x, y);
+        
+        // Apply texture to the coin if available
+        if (coinTexture.getSize().x > 0) {
+            coins.back().setTexture(coinTexture);
+        }
     }
 }
 
@@ -80,21 +100,28 @@ void Game::spawnObstacle() {
     
     // Create a new obstacle at the right edge of the screen
     obstacles.emplace_back(window_width, y, 50.0f, height);
+    
+    // Apply texture to the obstacle if available
+    if (obstacleTexture.getSize().x > 0) {
+        obstacles.back().setTexture(obstacleTexture);
+    }
 }
 
 void Game::updateCoins(float dt) {
+    if (!gameRunning) return;
+    
     // Move all coins to the left
     for (auto& coin : coins) {
-        sf::Vector2f pos = coin.shape.getPosition();
+        sf::Vector2f pos = coin.getPosition();
         pos.x -= backgroundScrollSpeed * dt;
-        coin.shape.setPosition(pos);
+        coin.setPosition(pos.x, pos.y);
     }
     
     // Remove coins that have moved off the left edge of the screen
     coins.erase(
         std::remove_if(coins.begin(), coins.end(), 
             [](const Coin& coin) { 
-                return !coin.active || coin.shape.getPosition().x < -30.0f; 
+                return !coin.active || coin.getPosition().x < -30.0f; 
             }),
         coins.end()
     );
@@ -105,17 +132,25 @@ void Game::updateCoins(float dt) {
         if (!coins.empty()) {
             lastX = 0;
             for (const auto& coin : coins) {
-                lastX = std::max(lastX, coin.shape.getPosition().x);
+                lastX = std::max(lastX, coin.getPosition().x);
             }
         }
         
         float x = std::max(lastX + 150.0f, window_width);
         float y = getRandomY();
+        
         coins.emplace_back(x, y);
+        
+        // Apply texture to the coin if available
+        if (coinTexture.getSize().x > 0) {
+            coins.back().setTexture(coinTexture);
+        }
     }
 }
 
 void Game::updateObstacles(float dt) {
+    if (!gameRunning) return;
+    
     // Update spawn timer
     spawnTimer += dt;
     if (spawnTimer >= obstacleSpawnInterval) {
@@ -125,22 +160,50 @@ void Game::updateObstacles(float dt) {
     
     // Move all obstacles to the left
     for (auto& obstacle : obstacles) {
-        sf::Vector2f pos = obstacle.shape.getPosition();
+        sf::Vector2f pos = obstacle.getPosition();
         pos.x -= obstacle.speed * dt;
-        obstacle.shape.setPosition(pos);
+        obstacle.setPosition(pos.x, pos.y);
     }
     
     // Remove obstacles that have moved off the left edge of the screen
     obstacles.erase(
         std::remove_if(obstacles.begin(), obstacles.end(),
             [](const Obstacle& obstacle) {
-                return obstacle.shape.getPosition().x + obstacle.shape.getSize().x < 0;
+                return obstacle.getPosition().x + obstacle.shape.getSize().x < 0;
             }),
         obstacles.end()
     );
 }
 
+void Game::gameOver() {
+    gameRunning = false;
+    std::cout << "Game Over! Final score: " << score << std::endl;
+    std::cout << "Press Enter to exit..." << std::endl;
+    
+    // Wait for Enter key press before closing
+    bool waitForEnter = true;
+    while (waitForEnter && window.isOpen()) {
+        sf::Event event;
+        while (window.pollEvent(event)) {
+            if (event.type == sf::Event::Closed) {
+                window.close();
+                return;
+            }
+            if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::Enter) {
+                waitForEnter = false;
+                window.close();
+                return;
+            }
+        }
+        
+        // Keep rendering the current scene
+        render();
+    }
+}
+
 void Game::checkCollisions() {
+    if (!gameRunning) return;
+    
     std::lock_guard<std::mutex> lock(state->mutex);
     if (state->player_id == -1) return;
     
@@ -153,7 +216,7 @@ void Game::checkCollisions() {
     for (auto& coin : coins) {
         if (!coin.active) continue;
         
-        sf::FloatRect coinBounds = coin.shape.getGlobalBounds();
+        sf::FloatRect coinBounds = coin.getGlobalBounds();
         if (playerBounds.intersects(coinBounds)) {
             // Collect the coin
             coin.active = false;
@@ -164,27 +227,17 @@ void Game::checkCollisions() {
     
     // Check collision with obstacles
     for (const auto& obstacle : obstacles) {
-        sf::FloatRect obstacleBounds = obstacle.shape.getGlobalBounds();
+        sf::FloatRect obstacleBounds = obstacle.getGlobalBounds();
         if (playerBounds.intersects(obstacleBounds)) {
-            // Handle collision (e.g., restart level, lose life, etc.)
-            std::cout << "Hit obstacle! Final score: " << score << std::endl;
-            // Reset player position (optional)
-            me.x = 150.0f;
-            me.y = 300.0f;
-            player_velocities[state->player_id] = 0;
-            score = 0;  // Reset score
-            
-            // Clear obstacles and regenerate coins
-            obstacles.clear();
-            coins.clear();
-            spawnCoins();
-            break;
+            // End the game
+            gameOver();
+            return;
         }
     }
 }
 
 void Game::run() {
-    while (window.isOpen()) {
+    while (window.isOpen() && gameRunning) {
         float dt = clock.restart().asSeconds();
         
         // Limit dt to prevent physics issues if game freezes momentarily
@@ -210,6 +263,8 @@ void Game::handleEvents() {
 }
 
 void Game::update(float dt) {
+    if (!gameRunning) return;
+    
     if (window.hasFocus()) {
         std::lock_guard<std::mutex> lock(state->mutex);
         if (state->player_id != -1) {
@@ -265,13 +320,21 @@ void Game::render() {
     // Draw coins
     for (const auto& coin : coins) {
         if (coin.active) {
-            window.draw(coin.shape);
+            if (coin.useSprite) {
+                window.draw(coin.sprite);
+            } else {
+                window.draw(coin.shape);
+            }
         }
     }
     
     // Draw obstacles
     for (const auto& obstacle : obstacles) {
-        window.draw(obstacle.shape);
+        if (obstacle.useSprite) {
+            window.draw(obstacle.sprite);
+        } else {
+            window.draw(obstacle.shape);
+        }
     }
     
     // Draw players
