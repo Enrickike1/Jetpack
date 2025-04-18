@@ -1,4 +1,5 @@
 #include "Game.hpp"
+#include <ctime>
 
 Game::Game(SharedCubeState* state) : state(state) {
     window.create(sf::VideoMode(800, 600), "Jetpack Multiplayer");
@@ -8,13 +9,22 @@ Game::Game(SharedCubeState* state) : state(state) {
         cubes[i].setFillColor(i % 2 == 0 ? sf::Color::Red : sf::Color::Green);
     }
 
-    state->players[0].x = 500.0f;
+    state->players[0].x = 150.0f;  // Position players more to the left
     state->players[0].y = 300.0f;
 
-    state->players[1].x = 600.0f;
+    state->players[1].x = 250.0f;
     state->players[1].y = 300.0f;
     
+    // Initialize random number generator
+    rng.seed(static_cast<unsigned int>(std::time(nullptr)));
+    
     loadBackground();
+    spawnCoins();  // Create initial coins
+}
+
+float Game::getRandomY() {
+    std::uniform_real_distribution<float> dist(50.0f, window_height - 100.0f);
+    return dist(rng);
 }
 
 void Game::loadBackground() {
@@ -54,6 +64,125 @@ void Game::updateBackground(float dt) {
     backgroundSprite2.setPosition(scaledWidth - backgroundOffset, 0);
 }
 
+void Game::spawnCoins() {
+    // Create some initial coins at different positions
+    for (int i = 0; i < 10; i++) {
+        float x = window_width + i * 150.0f;  // Spread coins out horizontally
+        float y = getRandomY();
+        coins.emplace_back(x, y);
+    }
+}
+
+void Game::spawnObstacle() {
+    // Vary obstacle height and vertical position
+    float height = std::uniform_real_distribution<float>(100.0f, 200.0f)(rng);
+    float y = std::uniform_real_distribution<float>(0.0f, window_height - height)(rng);
+    
+    // Create a new obstacle at the right edge of the screen
+    obstacles.emplace_back(window_width, y, 50.0f, height);
+}
+
+void Game::updateCoins(float dt) {
+    // Move all coins to the left
+    for (auto& coin : coins) {
+        sf::Vector2f pos = coin.shape.getPosition();
+        pos.x -= backgroundScrollSpeed * dt;
+        coin.shape.setPosition(pos);
+    }
+    
+    // Remove coins that have moved off the left edge of the screen
+    coins.erase(
+        std::remove_if(coins.begin(), coins.end(), 
+            [](const Coin& coin) { 
+                return !coin.active || coin.shape.getPosition().x < -30.0f; 
+            }),
+        coins.end()
+    );
+    
+    // Add new coins if needed
+    if (coins.size() < 10) {
+        float lastX = window_width;
+        if (!coins.empty()) {
+            lastX = 0;
+            for (const auto& coin : coins) {
+                lastX = std::max(lastX, coin.shape.getPosition().x);
+            }
+        }
+        
+        float x = std::max(lastX + 150.0f, window_width);
+        float y = getRandomY();
+        coins.emplace_back(x, y);
+    }
+}
+
+void Game::updateObstacles(float dt) {
+    // Update spawn timer
+    spawnTimer += dt;
+    if (spawnTimer >= obstacleSpawnInterval) {
+        spawnTimer = 0;
+        spawnObstacle();
+    }
+    
+    // Move all obstacles to the left
+    for (auto& obstacle : obstacles) {
+        sf::Vector2f pos = obstacle.shape.getPosition();
+        pos.x -= obstacle.speed * dt;
+        obstacle.shape.setPosition(pos);
+    }
+    
+    // Remove obstacles that have moved off the left edge of the screen
+    obstacles.erase(
+        std::remove_if(obstacles.begin(), obstacles.end(),
+            [](const Obstacle& obstacle) {
+                return obstacle.shape.getPosition().x + obstacle.shape.getSize().x < 0;
+            }),
+        obstacles.end()
+    );
+}
+
+void Game::checkCollisions() {
+    std::lock_guard<std::mutex> lock(state->mutex);
+    if (state->player_id == -1) return;
+    
+    auto& me = state->players[state->player_id];
+    
+    // Create a rectangle representing the player's hitbox
+    sf::FloatRect playerBounds(me.x, me.y, cube_size, cube_size);
+    
+    // Check collision with coins
+    for (auto& coin : coins) {
+        if (!coin.active) continue;
+        
+        sf::FloatRect coinBounds = coin.shape.getGlobalBounds();
+        if (playerBounds.intersects(coinBounds)) {
+            // Collect the coin
+            coin.active = false;
+            score += 10;
+            std::cout << "Score: " << score << std::endl;
+        }
+    }
+    
+    // Check collision with obstacles
+    for (const auto& obstacle : obstacles) {
+        sf::FloatRect obstacleBounds = obstacle.shape.getGlobalBounds();
+        if (playerBounds.intersects(obstacleBounds)) {
+            // Handle collision (e.g., restart level, lose life, etc.)
+            std::cout << "Hit obstacle! Final score: " << score << std::endl;
+            // Reset player position (optional)
+            me.x = 150.0f;
+            me.y = 300.0f;
+            player_velocities[state->player_id] = 0;
+            score = 0;  // Reset score
+            
+            // Clear obstacles and regenerate coins
+            obstacles.clear();
+            coins.clear();
+            spawnCoins();
+            break;
+        }
+    }
+}
+
 void Game::run() {
     while (window.isOpen()) {
         float dt = clock.restart().asSeconds();
@@ -63,7 +192,10 @@ void Game::run() {
         
         handleEvents();
         updateBackground(dt);
+        updateCoins(dt);
+        updateObstacles(dt);
         update(dt);
+        checkCollisions();
         render();
     }
 }
@@ -129,6 +261,18 @@ void Game::render() {
     // Draw background first
     window.draw(backgroundSprite1);
     window.draw(backgroundSprite2);
+    
+    // Draw coins
+    for (const auto& coin : coins) {
+        if (coin.active) {
+            window.draw(coin.shape);
+        }
+    }
+    
+    // Draw obstacles
+    for (const auto& obstacle : obstacles) {
+        window.draw(obstacle.shape);
+    }
     
     // Draw players
     {
