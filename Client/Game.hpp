@@ -21,11 +21,11 @@ private:
     float backgroundScrollSpeed = 50.0f;
     float backgroundOffset = 0.0f;
     
-    const float gravity = 0.8f;
-    const float jump_power = 5.0f;
-    const float max_fall_speed = 10.0f;
-    const float cube_size = 50.0f;
-    const float window_width = 800.0f;
+    // const float gravity = 0.8f;
+    // const float jump_power = 5.0f;
+    // const float max_fall_speed = 10.0f;
+    // const float cube_size = 50.0f;
+    // const float window_width = 800.0f;
     const float window_height = 600.0f;
     
     float player_velocities[2] = {0.0f, 0.0f};
